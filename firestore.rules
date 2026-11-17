@@ -1,0 +1,433 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Primitive & Identity Helpers
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function userEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function isSuperAdmin() {
+      return isVerifiedUser() && userEmail() == 'jbackup025@gmail.com';
+    }
+
+    function isValidSlug(slug) {
+      return slug is string
+        && slug.size() >= 3
+        && slug.size() <= 40
+        && slug.matches('^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$')
+        && !(slug in ['admin', 'super', 'wedding', 'api', 'privacy', 'terms']);
+    }
+
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailDocId(emailId) {
+      return emailId is string
+        && emailId.size() >= 3
+        && emailId.size() <= 160
+        && emailId == emailId.lower()
+        && emailId.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    }
+
+    function isWeddingAdmin(slug) {
+      return isVerifiedUser()
+        && isValidSlug(slug)
+        && exists(/databases/$(database)/documents/weddings/$(slug)/admins/$(userEmail()));
+    }
+
+    function weddingDoc(slug) {
+      return get(/databases/$(database)/documents/weddings/$(slug));
+    }
+
+    function isWeddingPubliclyActive(slug) {
+      return isValidSlug(slug)
+        && exists(/databases/$(database)/documents/weddings/$(slug))
+        && weddingDoc(slug).data.status == 'ACTIVE'
+        && weddingDoc(slug).data.expiresAt is timestamp
+        && weddingDoc(slug).data.expiresAt > request.time;
+    }
+
+    function publicSiteData(slug) {
+      return get(/databases/$(database)/documents/weddings/$(slug)/public/site).data;
+    }
+
+    function isBeforeRsvpDeadline(slug) {
+      return !exists(/databases/$(database)/documents/weddings/$(slug)/public/site)
+        || !('rsvpDeadlineTs' in publicSiteData(slug))
+        || !(publicSiteData(slug).rsvpDeadlineTs is timestamp)
+        || publicSiteData(slug).rsvpDeadlineTs > request.time;
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidWedding(data, slug) {
+      return data.keys().hasAll([
+          'slug', 'status', 'coupleNames', 'weddingDate', 'expiresAt',
+          'graceDays', 'readyForErase', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'slug', 'status', 'coupleNames', 'weddingDate', 'expiresAt',
+          'graceDays', 'readyForErase', 'createdAt', 'updatedAt'
+        ])
+        && data.slug == slug
+        && data.status in ['DRAFT', 'ACTIVE', 'COMPLETED', 'SUSPENDED', 'DELETION_PENDING']
+        && data.coupleNames is string && data.coupleNames.size() >= 1 && data.coupleNames.size() <= 120
+        && data.weddingDate is string && data.weddingDate.size() == 10 && data.weddingDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.expiresAt is timestamp
+        && data.graceDays is int && data.graceDays >= 1 && data.graceDays <= 365
+        && data.readyForErase is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWeddingAdmin(data, emailId) {
+      return data.keys().hasAll(['email', 'addedBy', 'addedAt'])
+        && data.keys().hasOnly(['email', 'addedBy', 'addedAt'])
+        && data.email == emailId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.addedBy is string && data.addedBy.size() >= 3 && data.addedBy.size() <= 160
+        && data.addedAt is timestamp;
+    }
+
+    function isValidPublicSite(data) {
+      return data.keys().hasAll([
+          'couple', 'theme', 'seo', 'countdownEnabled', 'sections',
+          'story', 'events', 'accommodations', 'gallery', 'faq',
+          'spotifyUrl', 'rsvpConfig', 'wishlistConfig', 'labels', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'couple', 'theme', 'seo', 'countdownEnabled', 'sections',
+          'story', 'events', 'accommodations', 'gallery', 'faq',
+          'spotifyUrl', 'rsvpConfig', 'wishlistConfig', 'labels',
+          'rsvpDeadlineTs', 'updatedAt'
+        ])
+        && data.couple is map
+        && data.theme is map
+        && data.seo is map
+        && data.countdownEnabled is bool
+        && data.sections is list && data.sections.size() <= 12
+        && data.story is map
+        && data.events is list && data.events.size() <= 20
+        && data.accommodations is list && data.accommodations.size() <= 20
+        && data.gallery is list && data.gallery.size() <= 20
+        && data.faq is list && data.faq.size() <= 30
+        && data.spotifyUrl is string && data.spotifyUrl.size() <= 300
+        && data.rsvpConfig is map
+        && data.wishlistConfig is map
+        && data.labels is map
+        && (!('rsvpDeadlineTs' in data) || data.rsvpDeadlineTs == null || data.rsvpDeadlineTs is timestamp)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAsset(data) {
+      return data.keys().hasAll(['kind', 'dataUrl', 'width', 'height', 'bytes', 'createdAt'])
+        && data.keys().hasOnly(['kind', 'dataUrl', 'width', 'height', 'bytes', 'createdAt'])
+        && data.kind in ['logo', 'qr', 'hero', 'gallery', 'story', 'event']
+        && data.dataUrl is string
+        && data.dataUrl.matches('^data:image/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$')
+        && data.width is int && data.width >= 1 && data.width <= 1600
+        && data.height is int && data.height >= 1 && data.height <= 1600
+        && data.bytes is int && data.bytes >= 1
+        && (
+          ((data.kind == 'logo' || data.kind == 'qr') && data.width <= 400 && data.height <= 400 && data.bytes <= 102400 && data.dataUrl.size() <= 145000)
+          ||
+          ((data.kind in ['hero', 'gallery', 'story', 'event']) && data.bytes <= 256000 && data.dataUrl.size() <= 360000)
+        )
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRsvp(data) {
+      return data.keys().hasAll([
+          'refCode', 'attending', 'fullName', 'mobile', 'email', 'group',
+          'guestCount', 'partyGuests', 'allergies', 'accommodationNeeded',
+          'roomsNeeded', 'checkInDate', 'checkOutDate', 'roomSharingNote',
+          'customAnswers', 'blessingMessage', 'consentAccepted',
+          'assignedRoom', 'accommodationStatus', 'adminCheckInDate', 'adminCheckOutDate',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'refCode', 'attending', 'fullName', 'mobile', 'email', 'group',
+          'guestCount', 'partyGuests', 'allergies', 'accommodationNeeded',
+          'roomsNeeded', 'checkInDate', 'checkOutDate', 'roomSharingNote',
+          'customAnswers', 'blessingMessage', 'consentAccepted',
+          'assignedRoom', 'accommodationStatus', 'adminCheckInDate', 'adminCheckOutDate',
+          'createdAt', 'updatedAt'
+        ])
+        && data.refCode is string && data.refCode.size() == 9 && data.refCode.matches('^MN-[A-Z0-9]{6}$')
+        && data.attending in ['yes', 'no']
+        && data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100
+        && data.mobile is string && data.mobile.size() >= 6 && data.mobile.size() <= 20
+        && data.email is string && data.email.size() <= 120
+        && data.group is string && data.group.size() <= 60
+        && data.guestCount is int && data.guestCount >= 1 && data.guestCount <= 20
+        && data.partyGuests is list && data.partyGuests.size() <= 20
+        && (data.partyGuests.size() == 0 || data.partyGuests[0] is map)
+        && data.allergies is string && data.allergies.size() <= 300
+        && data.accommodationNeeded is bool
+        && data.roomsNeeded is int && data.roomsNeeded >= 0 && data.roomsNeeded <= 10
+        && data.checkInDate is string && data.checkInDate.size() <= 20
+        && data.checkOutDate is string && data.checkOutDate.size() <= 20
+        && data.roomSharingNote is string && data.roomSharingNote.size() <= 300
+        && data.customAnswers is map && data.customAnswers.size() <= 5
+        && data.blessingMessage is string && data.blessingMessage.size() <= 500
+        && data.consentAccepted == true
+        && data.assignedRoom is string && data.assignedRoom.size() <= 100
+        && data.accommodationStatus in ['pending', 'confirmed']
+        && data.adminCheckInDate is string && data.adminCheckInDate.size() <= 20
+        && data.adminCheckOutDate is string && data.adminCheckOutDate.size() <= 20
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContribution(data) {
+      return data.keys().hasAll([
+          'ref', 'recipient', 'amountPaise', 'donorName', 'message',
+          'showName', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ref', 'recipient', 'amountPaise', 'donorName', 'message',
+          'showName', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.ref is string && data.ref.size() == 6 && data.ref.matches('^[A-Z0-9]{6}$')
+        && data.recipient in ['partner1', 'partner2']
+        && data.amountPaise is int && data.amountPaise >= 100 && data.amountPaise <= 10000000
+        && data.donorName is string && data.donorName.size() >= 1 && data.donorName.size() <= 80
+        && data.message is string && data.message.size() <= 500
+        && data.showName is bool
+        && data.status in ['pending', 'confirmed', 'reversed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBlessing(data) {
+      return data.keys().hasAll(['displayName', 'message', 'approved', 'source', 'sourceId', 'createdAt'])
+        && data.keys().hasOnly(['displayName', 'message', 'approved', 'source', 'sourceId', 'createdAt', 'updatedAt'])
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 500
+        && data.approved is bool
+        && data.source in ['contribution', 'rsvp']
+        && data.sourceId is string && data.sourceId.size() >= 1 && data.sourceId.size() <= 128
+        && data.createdAt is timestamp
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // -------------------------------------------------------------------------
+    // Platform-level Collections
+    // -------------------------------------------------------------------------
+    match /reservedSlugs/{slug} {
+      allow get, list: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /platformAuditLog/{logId} {
+      allow get, list: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-Wedding Isolated Collections
+    // -------------------------------------------------------------------------
+    match /weddings/{slug} {
+      allow get: if isValidSlug(slug) && (isSuperAdmin() || isWeddingAdmin(slug));
+      allow list: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        && isValidSlug(slug)
+        && !exists(/databases/$(database)/documents/reservedSlugs/$(slug))
+        && isValidWedding(incoming(), slug)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSuperAdmin()
+        && isValidSlug(slug)
+        && isValidWedding(incoming(), slug)
+        && incoming().slug == existing().slug
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSuperAdmin() && isValidSlug(slug);
+
+      // Couple Admin Allowlist
+      match /admins/{emailId} {
+        allow get: if isValidSlug(slug) && isValidEmailDocId(emailId) && (isSuperAdmin() || (isVerifiedUser() && userEmail() == emailId));
+        allow list: if isSuperAdmin() || isWeddingAdmin(slug);
+        allow create: if isSuperAdmin()
+          && isValidSlug(slug)
+          && isValidEmailDocId(emailId)
+          && isValidWeddingAdmin(incoming(), emailId)
+          && incoming().addedAt == request.time;
+        allow update: if isSuperAdmin()
+          && isValidSlug(slug)
+          && isValidEmailDocId(emailId)
+          && isValidWeddingAdmin(incoming(), emailId);
+        allow delete: if isSuperAdmin() && isValidSlug(slug) && isValidEmailDocId(emailId);
+      }
+
+      // Public Customization & Server-Only Progress
+      match /public/site {
+        allow get: if isValidSlug(slug) && (isSuperAdmin() || isWeddingAdmin(slug) || isWeddingPubliclyActive(slug));
+        allow list: if false;
+        allow create, update: if isValidSlug(slug)
+          && (isSuperAdmin() || isWeddingAdmin(slug))
+          && isValidPublicSite(incoming())
+          && incoming().updatedAt == request.time;
+        allow delete: if isSuperAdmin() && isValidSlug(slug);
+      }
+
+      match /public/progress {
+        allow get: if isValidSlug(slug) && (isSuperAdmin() || isWeddingAdmin(slug) || isWeddingPubliclyActive(slug));
+        allow list, create, update, delete: if false;
+      }
+
+      // Compressed Image Assets
+      match /assets/{assetId} {
+        allow get: if isValidSlug(slug) && isValidId(assetId) && (isSuperAdmin() || isWeddingAdmin(slug) || isWeddingPubliclyActive(slug));
+        allow list: if isSuperAdmin() || isWeddingAdmin(slug);
+        allow create: if isValidSlug(slug)
+          && isValidId(assetId)
+          && (isSuperAdmin() || isWeddingAdmin(slug))
+          && isValidAsset(incoming())
+          && incoming().createdAt == request.time;
+        allow update: if isValidSlug(slug)
+          && isValidId(assetId)
+          && (isSuperAdmin() || isWeddingAdmin(slug))
+          && isValidAsset(incoming())
+          && incoming().createdAt == existing().createdAt;
+        allow delete: if isValidSlug(slug) && isValidId(assetId) && (isSuperAdmin() || isWeddingAdmin(slug));
+      }
+
+      // RSVPs (Guest private get/edit via unguessable ID; never public list)
+      match /rsvps/{rsvpId} {
+        allow get: if isValidSlug(slug) && isValidId(rsvpId) && (
+          isSuperAdmin()
+          || isWeddingAdmin(slug)
+          || (rsvpId.size() >= 16 && isWeddingPubliclyActive(slug))
+        );
+        allow list: if isSuperAdmin() || isWeddingAdmin(slug);
+        allow create: if isValidSlug(slug)
+          && isValidId(rsvpId)
+          && isValidRsvp(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (
+            isSuperAdmin()
+            || isWeddingAdmin(slug)
+            || (
+              rsvpId.size() >= 16
+              && isWeddingPubliclyActive(slug)
+              && isBeforeRsvpDeadline(slug)
+              && incoming().assignedRoom == ''
+              && incoming().accommodationStatus == 'pending'
+              && incoming().adminCheckInDate == ''
+              && incoming().adminCheckOutDate == ''
+            )
+          );
+        allow update: if isValidSlug(slug)
+          && isValidId(rsvpId)
+          && isValidRsvp(incoming())
+          && incoming().createdAt == existing().createdAt
+          && incoming().refCode == existing().refCode
+          && incoming().updatedAt == request.time
+          && (
+            (
+              (isSuperAdmin() || isWeddingAdmin(slug))
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'attending', 'fullName', 'mobile', 'email', 'group', 'guestCount',
+                'partyGuests', 'allergies', 'accommodationNeeded', 'roomsNeeded',
+                'checkInDate', 'checkOutDate', 'roomSharingNote', 'customAnswers',
+                'blessingMessage', 'assignedRoom', 'accommodationStatus',
+                'adminCheckInDate', 'adminCheckOutDate', 'updatedAt'
+              ])
+            )
+            || (
+              rsvpId.size() >= 16
+              && isWeddingPubliclyActive(slug)
+              && isBeforeRsvpDeadline(slug)
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'attending', 'fullName', 'mobile', 'email', 'group', 'guestCount',
+                'partyGuests', 'allergies', 'accommodationNeeded', 'roomsNeeded',
+                'checkInDate', 'checkOutDate', 'roomSharingNote', 'customAnswers',
+                'blessingMessage', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if isValidSlug(slug) && isValidId(rsvpId) && (isSuperAdmin() || isWeddingAdmin(slug));
+      }
+
+      // Contributions (Guest creates pending only; Admin reads; Server confirms/reverses/deletes)
+      match /contributions/{contributionId} {
+        allow get: if isValidSlug(slug) && isValidId(contributionId) && (isSuperAdmin() || isWeddingAdmin(slug));
+        allow list: if isSuperAdmin() || isWeddingAdmin(slug);
+        allow create: if isValidSlug(slug)
+          && isValidId(contributionId)
+          && isValidContribution(incoming())
+          && isWeddingPubliclyActive(slug)
+          && incoming().status == 'pending'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update, delete: if false;
+      }
+
+      // Blessings Wall (Public reads approved only while ACTIVE; Admin approves/hides/deletes)
+      match /blessings/{blessingId} {
+        allow get: if isValidSlug(slug) && isValidId(blessingId) && (
+          isSuperAdmin()
+          || isWeddingAdmin(slug)
+          || (existing().approved == true && isWeddingPubliclyActive(slug))
+        );
+        allow list: if isSuperAdmin()
+          || isWeddingAdmin(slug)
+          || (resource.data.approved == true && isWeddingPubliclyActive(slug));
+        allow create: if isValidSlug(slug)
+          && isValidId(blessingId)
+          && isValidBlessing(incoming())
+          && isWeddingPubliclyActive(slug)
+          && incoming().approved == false
+          && incoming().source == 'rsvp'
+          && incoming().createdAt == request.time;
+        allow update: if isValidSlug(slug)
+          && isValidId(blessingId)
+          && (isSuperAdmin() || isWeddingAdmin(slug))
+          && isValidBlessing(incoming())
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['approved', 'updatedAt'])
+          && incoming().updatedAt == request.time;
+        allow delete: if isValidSlug(slug) && isValidId(blessingId) && (isSuperAdmin() || isWeddingAdmin(slug));
+      }
+
+      // Per-Wedding Audit Logs (Server writes only; Admin reads)
+      match /auditLogs/{logId} {
+        allow get: if isValidSlug(slug) && isValidId(logId) && (isSuperAdmin() || isWeddingAdmin(slug));
+        allow list: if isSuperAdmin() || isWeddingAdmin(slug);
+        allow create, update, delete: if false;
+      }
+    }
+  }
+}

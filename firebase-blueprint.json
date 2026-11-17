@@ -1,0 +1,302 @@
+{
+  "entities": {
+    "Wedding": {
+      "title": "Wedding",
+      "description": "Root document for an isolated couple wedding instance keyed by slug.",
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "ACTIVE", "COMPLETED", "SUSPENDED", "DELETION_PENDING"]
+        },
+        "coupleNames": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "weddingDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "maxLength": 10
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "graceDays": {
+          "type": "integer"
+        },
+        "readyForErase": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["slug", "status", "coupleNames", "weddingDate", "expiresAt", "graceDays", "createdAt", "updatedAt"]
+    },
+    "WeddingAdmin": {
+      "title": "WeddingAdmin",
+      "description": "Invited couple admin email authorized for a single wedding.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "addedBy": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "addedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "addedBy", "addedAt"]
+    },
+    "PublicSite": {
+      "title": "PublicSite",
+      "description": "All public couple customization, theme, sections, RSVP settings, and Moi UPI settings.",
+      "type": "object",
+      "properties": {
+        "couple": { "type": "object" },
+        "theme": { "type": "object" },
+        "seo": { "type": "object" },
+        "countdownEnabled": { "type": "boolean" },
+        "sections": { "type": "array" },
+        "story": { "type": "object" },
+        "events": { "type": "array" },
+        "accommodations": { "type": "array" },
+        "gallery": { "type": "array" },
+        "faq": { "type": "array" },
+        "spotifyUrl": { "type": "string", "maxLength": 300 },
+        "rsvpConfig": { "type": "object" },
+        "wishlistConfig": { "type": "object" },
+        "labels": { "type": "object" },
+        "rsvpDeadlineTs": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["couple", "theme", "seo", "countdownEnabled", "sections", "rsvpConfig", "wishlistConfig", "labels", "updatedAt"]
+    },
+    "PublicProgress": {
+      "title": "PublicProgress",
+      "description": "Server-maintained confirmed Moi total in integer paise.",
+      "type": "object",
+      "properties": {
+        "confirmedTotalPaise": { "type": "integer" },
+        "partner1TotalPaise": { "type": "integer" },
+        "partner2TotalPaise": { "type": "integer" },
+        "confirmedCount": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["confirmedTotalPaise", "partner1TotalPaise", "partner2TotalPaise", "confirmedCount", "updatedAt"]
+    },
+    "WeddingAsset": {
+      "title": "WeddingAsset",
+      "description": "Compressed WebP image asset stored via assetStore.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["logo", "qr", "hero", "gallery", "story", "event"]
+        },
+        "dataUrl": {
+          "type": "string",
+          "maxLength": 400000
+        },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "bytes": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["kind", "dataUrl", "width", "height", "bytes", "createdAt"]
+    },
+    "Rsvp": {
+      "title": "Rsvp",
+      "description": "Guest RSVP submission keyed by an unguessable random ID.",
+      "type": "object",
+      "properties": {
+        "refCode": {
+          "type": "string",
+          "pattern": "^MN-[A-Z0-9]{6}$",
+          "maxLength": 9
+        },
+        "attending": {
+          "type": "string",
+          "enum": ["yes", "no"]
+        },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "mobile": { "type": "string", "minLength": 6, "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 120 },
+        "group": { "type": "string", "maxLength": 60 },
+        "guestCount": { "type": "integer" },
+        "partyGuests": { "type": "array" },
+        "allergies": { "type": "string", "maxLength": 300 },
+        "accommodationNeeded": { "type": "boolean" },
+        "roomsNeeded": { "type": "integer" },
+        "checkInDate": { "type": "string", "maxLength": 20 },
+        "checkOutDate": { "type": "string", "maxLength": 20 },
+        "roomSharingNote": { "type": "string", "maxLength": 300 },
+        "customAnswers": { "type": "object" },
+        "blessingMessage": { "type": "string", "maxLength": 500 },
+        "consentAccepted": { "type": "boolean" },
+        "assignedRoom": { "type": "string", "maxLength": 100 },
+        "accommodationStatus": { "type": "string", "enum": ["pending", "confirmed"] },
+        "adminCheckInDate": { "type": "string", "maxLength": 20 },
+        "adminCheckOutDate": { "type": "string", "maxLength": 20 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "refCode",
+        "attending",
+        "fullName",
+        "mobile",
+        "email",
+        "group",
+        "guestCount",
+        "partyGuests",
+        "allergies",
+        "accommodationNeeded",
+        "roomsNeeded",
+        "checkInDate",
+        "checkOutDate",
+        "roomSharingNote",
+        "customAnswers",
+        "blessingMessage",
+        "consentAccepted",
+        "assignedRoom",
+        "accommodationStatus",
+        "adminCheckInDate",
+        "adminCheckOutDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Contribution": {
+      "title": "Contribution",
+      "description": "Direct UPI Moi contribution intent logged by a guest.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "pattern": "^[A-Z0-9]{6}$", "maxLength": 6 },
+        "recipient": { "type": "string", "enum": ["partner1", "partner2"] },
+        "amountPaise": { "type": "integer" },
+        "donorName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "message": { "type": "string", "maxLength": 500 },
+        "showName": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "reversed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ref", "recipient", "amountPaise", "donorName", "message", "showName", "status", "createdAt", "updatedAt"]
+    },
+    "Blessing": {
+      "title": "Blessing",
+      "description": "Public blessing wall entry without amount or recipient.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "approved": { "type": "boolean" },
+        "source": { "type": "string", "enum": ["contribution", "rsvp"] },
+        "sourceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "message", "approved", "source", "sourceId", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Per-wedding non-PII admin audit log written by server.",
+      "type": "object",
+      "properties": {
+        "actorEmail": { "type": "string", "maxLength": 160 },
+        "action": { "type": "string", "maxLength": 64 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorEmail", "action", "targetId", "timestamp"]
+    },
+    "ReservedSlug": {
+      "title": "ReservedSlug",
+      "description": "Non-personal tombstone preventing reuse of erased wedding slugs.",
+      "type": "object",
+      "properties": {
+        "erasedAt": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["erasedAt", "reason"]
+    },
+    "PlatformAuditLog": {
+      "title": "PlatformAuditLog",
+      "description": "Non-personal platform-level audit entry written by server.",
+      "type": "object",
+      "properties": {
+        "actorEmail": { "type": "string", "maxLength": 160 },
+        "action": { "type": "string", "maxLength": 64 },
+        "targetSlug": { "type": "string", "maxLength": 40 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorEmail", "action", "targetSlug", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/weddings/{slug}": {
+      "schema": { "$ref": "#/entities/Wedding" },
+      "description": "Wedding lifecycle document readable by super admin and that wedding's admins."
+    },
+    "/weddings/{slug}/admins/{lowercaseEmail}": {
+      "schema": { "$ref": "#/entities/WeddingAdmin" },
+      "description": "Couple admin allowlist per wedding (max 3)."
+    },
+    "/weddings/{slug}/public/site": {
+      "schema": { "$ref": "#/entities/PublicSite" },
+      "description": "Publicly readable wedding customization while wedding is ACTIVE and unexpired."
+    },
+    "/weddings/{slug}/public/progress": {
+      "schema": { "$ref": "#/entities/PublicProgress" },
+      "description": "Server-only confirmed Moi progress totals in integer paise."
+    },
+    "/weddings/{slug}/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/WeddingAsset" },
+      "description": "Compressed WebP image assets (max 15 per wedding)."
+    },
+    "/weddings/{slug}/rsvps/{rsvpId}": {
+      "schema": { "$ref": "#/entities/Rsvp" },
+      "description": "Guest RSVPs with unguessable IDs for private self-edit."
+    },
+    "/weddings/{slug}/contributions/{contributionId}": {
+      "schema": { "$ref": "#/entities/Contribution" },
+      "description": "UPI Moi contributions created as pending by guests and confirmed only on server."
+    },
+    "/weddings/{slug}/blessings/{blessingId}": {
+      "schema": { "$ref": "#/entities/Blessing" },
+      "description": "Moderated guest blessings wall (no amount or recipient)."
+    },
+    "/weddings/{slug}/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Server-written wedding audit log without PII."
+    },
+    "/reservedSlugs/{slug}": {
+      "schema": { "$ref": "#/entities/ReservedSlug" },
+      "description": "Tombstone for erased slugs."
+    },
+    "/platformAuditLog/{logId}": {
+      "schema": { "$ref": "#/entities/PlatformAuditLog" },
+      "description": "Platform-level non-personal audit records."
+    }
+  }
+}
