@@ -26,8 +26,8 @@ export async function seedStagingDemoWedding(actorEmail: string): Promise<void> 
   expiryDate.setDate(expiryDate.getDate() + 90);
 
   const site = buildInitialPublicSite({
-    partner1Name: 'Meera Krishnan',
-    partner2Name: 'Arjun Subramanian',
+    partner1Name: 'Jerin',
+    partner2Name: 'Vini',
     weddingDate: weddingDateStr,
     themePresetId: 'classic-gold',
   });
@@ -76,7 +76,7 @@ export async function seedStagingDemoWedding(actorEmail: string): Promise<void> 
       address: '120 St. Marys Road, Alwarpet, Chennai',
       phone: '+91 44 2430 4050',
       mapLink: 'https://maps.google.com/?q=Alwarpet+Chennai',
-      notes: '10 minutes from the mandapam. Mention the Krishnan-Subramanian block when checking in.',
+      notes: '10 minutes from the mandapam. Mention the Jerin & Vini block when checking in.',
     },
   ];
 
@@ -105,7 +105,7 @@ export async function seedStagingDemoWedding(actorEmail: string): Promise<void> 
   batch.set(doc(db, 'weddings', slug), {
     slug,
     status: 'ACTIVE',
-    coupleNames: 'Meera & Arjun',
+    coupleNames: 'Jerin & Vini',
     weddingDate: weddingDateStr,
     expiresAt: Timestamp.fromDate(expiryDate),
     graceDays: 30,

@@ -23,11 +23,6 @@ interface SessionRsvpRecord {
   rsvpId: string;
   refCode: string;
   fullNameNormalized: string;
-  mobileNormalized: string;
-}
-
-function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, '').slice(-10);
 }
 
 function normalizeName(name: string): string {
@@ -70,7 +65,6 @@ export function RsvpFormSection({
 
   const [attending, setAttending] = useState<'yes' | 'no'>('yes');
   const [fullName, setFullName] = useState('');
-  const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [group, setGroup] = useState(rsvpConfig.groups[0] || '');
   const [guestCount, setGuestCount] = useState(1);
@@ -123,7 +117,6 @@ export function RsvpFormSection({
         const data = snap.data() as RsvpDoc;
         setAttending(data.attending);
         setFullName(data.fullName);
-        setMobile(data.mobile);
         setEmail(data.email || '');
         setGroup(data.group || '');
         setGuestCount(data.guestCount || 1);
@@ -177,16 +170,15 @@ export function RsvpFormSection({
       return;
     }
     const nName = normalizeName(fullName);
-    const nPhone = normalizePhone(mobile);
-    if (!nName || nPhone.length < 6) {
+    if (!nName) {
       setDuplicateMatch(null);
       return;
     }
     const found = getSessionRsvps(slug).find(
-      (r) => r.fullNameNormalized === nName && r.mobileNormalized === nPhone
+      (r) => r.fullNameNormalized === nName
     );
     setDuplicateMatch(found || null);
-  }, [slug, fullName, mobile, activeEditId]);
+  }, [slug, fullName, activeEditId]);
 
   function loadDuplicateIntoEditor(rec: SessionRsvpRecord) {
     setActiveEditId(rec.rsvpId);
@@ -199,7 +191,6 @@ export function RsvpFormSection({
           const data = snap.data() as RsvpDoc;
           setAttending(data.attending);
           setFullName(data.fullName);
-          setMobile(data.mobile);
           setEmail(data.email || '');
           setGroup(data.group || '');
           setGuestCount(data.guestCount || 1);
@@ -244,10 +235,6 @@ export function RsvpFormSection({
       setError('Please enter your full name.');
       return;
     }
-    if (mobile.trim().length < 6) {
-      setError('Please enter a valid mobile number.');
-      return;
-    }
     if (rsvpConfig.fields.email.visible && rsvpConfig.fields.email.required && !email.trim()) {
       setError('Please enter your email address.');
       return;
@@ -289,7 +276,6 @@ export function RsvpFormSection({
         await updateDoc(doc(db, 'weddings', slug, 'rsvps', activeEditId), {
           attending,
           fullName: fullName.trim().slice(0, 100),
-          mobile: mobile.trim().slice(0, 20),
           email: email.trim().slice(0, 120),
           group: group.trim().slice(0, 60),
           guestCount: attending === 'yes' ? guestCount : 1,
@@ -310,7 +296,6 @@ export function RsvpFormSection({
           rsvpId: activeEditId,
           refCode: activeRefCode,
           fullNameNormalized: normalizeName(fullName),
-          mobileNormalized: normalizePhone(mobile),
         });
 
         setSubmittedResult({
@@ -326,7 +311,6 @@ export function RsvpFormSection({
           refCode,
           attending,
           fullName: fullName.trim().slice(0, 100),
-          mobile: mobile.trim().slice(0, 20),
           email: email.trim().slice(0, 120),
           group: group.trim().slice(0, 60),
           guestCount: attending === 'yes' ? guestCount : 1,
@@ -366,7 +350,6 @@ export function RsvpFormSection({
           rsvpId: newRsvpId,
           refCode,
           fullNameNormalized: normalizeName(fullName),
-          mobileNormalized: normalizePhone(mobile),
         });
 
         setActiveEditId(newRsvpId);
@@ -532,7 +515,7 @@ export function RsvpFormSection({
         >
           <div>
             <p className="font-medium">
-              An RSVP with this name and mobile number was already submitted ({duplicateMatch.refCode}).
+              An RSVP with this name was already submitted ({duplicateMatch.refCode}).
             </p>
             <p className="text-xs mt-0.5" style={{ color: mutedColor }}>
               You can update your existing response instead of creating a duplicate.
@@ -593,7 +576,13 @@ export function RsvpFormSection({
 
       {/* Primary Contact Fields */}
       <div className="grid sm:grid-cols-2 gap-4">
-        <div>
+        <div
+          className={
+            rsvpConfig.fields.email.visible === rsvpConfig.fields.group.visible
+              ? 'sm:col-span-2'
+              : ''
+          }
+        >
           <label htmlFor="rsvp-fullname" className="block text-sm font-medium mb-1.5">
             Full Name *
           </label>
@@ -606,24 +595,6 @@ export function RsvpFormSection({
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="e.g., Priya Natarajan"
-            className="w-full min-h-[44px] px-3.5 rounded-lg border bg-transparent text-sm outline-none focus:ring-2"
-            style={{ borderColor }}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="rsvp-mobile" className="block text-sm font-medium mb-1.5">
-            Mobile Number *
-          </label>
-          <input
-            id="rsvp-mobile"
-            type="tel"
-            required
-            maxLength={20}
-            disabled={deadlinePassed}
-            value={mobile}
-            onChange={(e) => setMobile(e.target.value)}
-            placeholder="e.g., +91 98400 12345"
             className="w-full min-h-[44px] px-3.5 rounded-lg border bg-transparent text-sm outline-none focus:ring-2"
             style={{ borderColor }}
           />
@@ -679,7 +650,7 @@ export function RsvpFormSection({
       {attending === 'yes' && (
         <>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div>
+            <div className={rsvpConfig.fields.allergies.visible ? '' : 'sm:col-span-2'}>
               <label htmlFor="rsvp-guest-count" className="block text-sm font-medium mb-1.5">
                 Number of Guests (1–{maxGuests})
               </label>

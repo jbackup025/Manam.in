@@ -168,7 +168,7 @@ service cloud.firestore {
 
     function isValidRsvp(data) {
       return data.keys().hasAll([
-          'refCode', 'attending', 'fullName', 'mobile', 'email', 'group',
+          'refCode', 'attending', 'fullName', 'email', 'group',
           'guestCount', 'partyGuests', 'allergies', 'accommodationNeeded',
           'roomsNeeded', 'checkInDate', 'checkOutDate', 'roomSharingNote',
           'customAnswers', 'blessingMessage', 'consentAccepted',
@@ -176,7 +176,7 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'refCode', 'attending', 'fullName', 'mobile', 'email', 'group',
+          'refCode', 'attending', 'status', 'fullName', 'mobile', 'email', 'group',
           'guestCount', 'partyGuests', 'allergies', 'accommodationNeeded',
           'roomsNeeded', 'checkInDate', 'checkOutDate', 'roomSharingNote',
           'customAnswers', 'blessingMessage', 'consentAccepted',
@@ -185,8 +185,9 @@ service cloud.firestore {
         ])
         && data.refCode is string && data.refCode.size() == 9 && data.refCode.matches('^MN-[A-Z0-9]{6}$')
         && data.attending in ['yes', 'no']
+        && (!('status' in data) || data.status in ['confirmed', 'declined', 'pending'])
         && data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100
-        && data.mobile is string && data.mobile.size() >= 6 && data.mobile.size() <= 20
+        && (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 20))
         && data.email is string && data.email.size() <= 120
         && data.group is string && data.group.size() <= 60
         && data.guestCount is int && data.guestCount >= 1 && data.guestCount <= 20
@@ -359,7 +360,7 @@ service cloud.firestore {
             (
               (isSuperAdmin() || isWeddingAdmin(slug))
               && incoming().diff(existing()).affectedKeys().hasOnly([
-                'attending', 'fullName', 'mobile', 'email', 'group', 'guestCount',
+                'attending', 'status', 'fullName', 'mobile', 'email', 'group', 'guestCount',
                 'partyGuests', 'allergies', 'accommodationNeeded', 'roomsNeeded',
                 'checkInDate', 'checkOutDate', 'roomSharingNote', 'customAnswers',
                 'blessingMessage', 'assignedRoom', 'accommodationStatus',

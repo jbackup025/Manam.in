@@ -37,8 +37,18 @@ import type {
   PublicProgressDoc,
   PublicSiteDoc,
   RsvpDoc,
+  RsvpStatus,
   WeddingDoc,
 } from '../types/wedding';
+
+function getRsvpStatus(r: RsvpDoc): RsvpStatus {
+  if (r.status === 'confirmed' || r.status === 'declined' || r.status === 'pending') {
+    return r.status;
+  }
+  if (r.attending === 'no') return 'declined';
+  if (r.accommodationNeeded && r.accommodationStatus === 'pending') return 'pending';
+  return 'confirmed';
+}
 import { resetPlatformDocumentMeta } from '../lib/seo';
 import { WeddingSiteRenderer } from '../components/WeddingSiteRenderer';
 import { CopyLinkButton } from '../components/CopyLinkButton';
@@ -70,7 +80,7 @@ export function CoupleAdminPage() {
 
   // Filters
   const [rsvpSearch, setRsvpSearch] = useState('');
-  const [attendingFilter, setAttendingFilter] = useState<'all' | 'yes' | 'no'>('all');
+  const [rsvpStatusFilter, setRsvpStatusFilter] = useState<'all' | RsvpStatus>('all');
   const [dietFilter, setDietFilter] = useState<'all' | 'veg' | 'non-veg'>('all');
   const [accomFilter, setAccomFilter] = useState<'all' | 'yes' | 'no'>('all');
   const [groupFilter, setGroupFilter] = useState<string>('all');
@@ -309,10 +319,28 @@ export function CoupleAdminPage() {
     };
   }, [rsvps, contributions, blessings]);
 
+  const rsvpStatusCounts = useMemo(() => {
+    let confirmed = 0;
+    let declined = 0;
+    let pending = 0;
+    for (const r of rsvps) {
+      const s = getRsvpStatus(r);
+      if (s === 'confirmed') confirmed += 1;
+      else if (s === 'declined') declined += 1;
+      else pending += 1;
+    }
+    return {
+      all: rsvps.length,
+      confirmed,
+      declined,
+      pending,
+    };
+  }, [rsvps]);
+
   const filteredRsvps = useMemo(() => {
     const q = rsvpSearch.trim().toLowerCase();
     return rsvps.filter((r) => {
-      if (attendingFilter !== 'all' && r.attending !== attendingFilter) return false;
+      if (rsvpStatusFilter !== 'all' && getRsvpStatus(r) !== rsvpStatusFilter) return false;
       if (accomFilter === 'yes' && !r.accommodationNeeded) return false;
       if (accomFilter === 'no' && r.accommodationNeeded) return false;
       if (groupFilter !== 'all' && r.group !== groupFilter) return false;
@@ -321,12 +349,12 @@ export function CoupleAdminPage() {
         if (!hasDiet) return false;
       }
       if (q) {
-        const hay = `${r.fullName} ${r.mobile} ${r.refCode} ${r.group}`.toLowerCase();
+        const hay = `${r.fullName} ${r.email} ${r.refCode} ${r.group}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rsvps, rsvpSearch, attendingFilter, dietFilter, accomFilter, groupFilter]);
+  }, [rsvps, rsvpSearch, rsvpStatusFilter, dietFilter, accomFilter, groupFilter]);
 
   const filteredContribs = useMemo(() => {
     return contributions.filter((c) => {
@@ -379,8 +407,8 @@ export function CoupleAdminPage() {
     try {
       await updateDoc(doc(db, path), {
         attending: r.attending,
+        status: getRsvpStatus(r),
         fullName: r.fullName,
-        mobile: r.mobile,
         email: r.email,
         group: r.group,
         guestCount: r.guestCount,
@@ -612,18 +640,39 @@ export function CoupleAdminPage() {
                   type="search"
                   value={rsvpSearch}
                   onChange={(e) => setRsvpSearch(e.target.value)}
-                  placeholder="Search name, mobile, ref..."
+                  placeholder="Search name, email, ref..."
                   className="min-h-[40px] px-3 rounded-lg border border-[#1D1915]/15 bg-white text-sm"
                 />
-                <select
-                  value={attendingFilter}
-                  onChange={(e) => setAttendingFilter(e.target.value as 'all' | 'yes' | 'no')}
-                  className="min-h-[40px] px-2.5 rounded-lg border border-[#1D1915]/15 bg-white text-xs"
+                <div
+                  role="group"
+                  aria-label="Filter RSVPs by status"
+                  className="inline-flex flex-wrap rounded-lg border border-[#1D1915]/15 bg-white p-0.5 gap-0.5"
                 >
-                  <option value="all">All Attendance</option>
-                  <option value="yes">Attending</option>
-                  <option value="no">Declined</option>
-                </select>
+                  {(
+                    [
+                      { id: 'all', label: `All (${rsvpStatusCounts.all})` },
+                      { id: 'confirmed', label: `Confirmed (${rsvpStatusCounts.confirmed})` },
+                      { id: 'declined', label: `Declined (${rsvpStatusCounts.declined})` },
+                      { id: 'pending', label: `Pending (${rsvpStatusCounts.pending})` },
+                    ] as const
+                  ).map((opt) => {
+                    const active = rsvpStatusFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setRsvpStatusFilter(opt.id)}
+                        className={`min-h-[34px] px-3 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-[#7C5821] text-white'
+                            : 'text-[#5E554B] hover:text-[#1D1915] hover:bg-[#FAF7F2]'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 <select
                   value={dietFilter}
                   onChange={(e) => setDietFilter(e.target.value as 'all' | 'veg' | 'non-veg')}
@@ -701,7 +750,7 @@ export function CoupleAdminPage() {
                   <thead>
                     <tr className="border-b border-[#1D1915]/10 text-xs text-[#5E554B]">
                       <th className="py-3 px-4">Ref</th>
-                      <th className="py-3 px-4">Name &amp; Mobile</th>
+                      <th className="py-3 px-4">Name</th>
                       <th className="py-3 px-4">Group</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4">Party &amp; Diet</th>
@@ -717,11 +766,32 @@ export function CoupleAdminPage() {
                           <td className="py-3 px-4 font-mono text-xs tabular-nums">{r.refCode}</td>
                           <td className="py-3 px-4">
                             <div className="font-medium">{r.fullName}</div>
-                            <div className="text-xs text-[#5E554B] tabular-nums">{r.mobile}</div>
+                            {r.email && <div className="text-xs text-[#5E554B]">{r.email}</div>}
                           </td>
                           <td className="py-3 px-4 text-xs">{r.group || '—'}</td>
                           <td className="py-3 px-4 text-xs font-medium">
-                            {r.attending === 'yes' ? 'Attending' : 'Declined'}
+                            {(() => {
+                              const status = getRsvpStatus(r);
+                              if (status === 'confirmed') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#E6F4EA] text-[#1E4D3B]">
+                                    Confirmed
+                                  </span>
+                                );
+                              }
+                              if (status === 'declined') {
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#FEE2E2] text-[#991B1B]">
+                                    Declined
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#FEF3C7] text-[#92400E]">
+                                  Pending
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 px-4 text-xs">
                             <div className="tabular-nums font-medium">{r.guestCount} guests</div>
@@ -792,7 +862,7 @@ export function CoupleAdminPage() {
                       <tr key={r.id}>
                         <td className="py-3 px-4">
                           <div className="font-medium">{r.fullName}</div>
-                          <div className="text-xs text-[#5E554B]">{r.roomSharingNote || r.mobile}</div>
+                          <div className="text-xs text-[#5E554B]">{r.roomSharingNote || r.email || '—'}</div>
                         </td>
                         <td className="py-3 px-4 tabular-nums">{r.roomsNeeded}</td>
                         <td className="py-3 px-4">
@@ -1081,24 +1151,21 @@ export function CoupleAdminPage() {
                 onChange={(e) => setEditingRsvp({ ...editingRsvp, fullName: e.target.value })}
                 className="w-full min-h-[40px] px-3 rounded border border-[#1D1915]/15 text-sm"
               />
-              <input
-                type="text"
-                value={editingRsvp.mobile}
-                onChange={(e) => setEditingRsvp({ ...editingRsvp, mobile: e.target.value })}
-                className="w-full min-h-[40px] px-3 rounded border border-[#1D1915]/15 text-sm"
-              />
               <select
-                value={editingRsvp.attending}
-                onChange={(e) =>
+                value={getRsvpStatus(editingRsvp)}
+                onChange={(e) => {
+                  const nextStatus = e.target.value as RsvpStatus;
                   setEditingRsvp({
                     ...editingRsvp,
-                    attending: e.target.value as 'yes' | 'no',
-                  })
-                }
+                    status: nextStatus,
+                    attending: nextStatus === 'declined' ? 'no' : 'yes',
+                  });
+                }}
                 className="w-full min-h-[40px] px-3 rounded border border-[#1D1915]/15 text-sm"
               >
-                <option value="yes">Joyfully Accepts</option>
-                <option value="no">Regretfully Declines</option>
+                <option value="confirmed">Confirmed (Attending)</option>
+                <option value="pending">Pending</option>
+                <option value="declined">Declined</option>
               </select>
             </div>
             <div className="flex justify-end gap-2 pt-2">

@@ -68,7 +68,7 @@ export function PrivacyPage() {
       <section>
         <h2 className="text-lg font-semibold mb-2">1. What We Collect</h2>
         <p className="text-[#5E554B]">
-          {PLATFORM_NAME} collects only the minimum information required for a couple to organize their wedding: guest RSVP details (name, mobile number, optional email, family group, guest count, dietary preferences, accommodation needs, and optional custom question responses), Moi contribution records (selected recipient, amount in INR, donor name, reference code, and optional blessing), and admin sign-in identifiers (verified Google email addresses for authorized couple admins and the platform owner).
+          {PLATFORM_NAME} collects only the minimum information required for a couple to organize their wedding: guest RSVP details (name, optional email, family group, guest count, dietary preferences, accommodation needs, and optional custom question responses), Moi contribution records (selected recipient, amount in INR, donor name, reference code, and optional blessing), and admin sign-in identifiers (verified Google email addresses for authorized couple admins and the platform owner).
         </p>
       </section>
 

@@ -206,12 +206,15 @@ export interface PartyGuest {
   diet: 'veg' | 'non-veg';
 }
 
+export type RsvpStatus = 'confirmed' | 'declined' | 'pending';
+
 export interface RsvpDoc {
   id?: string;
   refCode: string;
   attending: 'yes' | 'no';
+  status?: RsvpStatus;
   fullName: string;
-  mobile: string;
+  mobile?: string;
   email: string;
   group: string;
   guestCount: number;

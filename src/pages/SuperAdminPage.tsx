@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertOctagon,
+  Check,
   Download,
   ExternalLink,
+  Pencil,
   Plus,
   ShieldAlert,
   Trash2,
   UserPlus,
+  X,
 } from 'lucide-react';
 import {
   Timestamp,
@@ -97,6 +100,9 @@ export function SuperAdminPage() {
   const [eraseResult, setEraseResult] = useState<string>('');
   const [eraseError, setEraseError] = useState<string>('');
   const [seedingDemo, setSeedingDemo] = useState(false);
+  const [editingCoupleSlug, setEditingCoupleSlug] = useState<string | null>(null);
+  const [editingCoupleValue, setEditingCoupleValue] = useState('');
+  const [savingCouple, setSavingCouple] = useState(false);
 
   const isAuthorizedSuper =
     Boolean(user) &&
@@ -338,6 +344,28 @@ export function SuperAdminPage() {
       }).catch(() => {});
     } catch (err) {
       setManageError(err instanceof Error ? err.message : 'Failed to update status');
+    }
+  }
+
+  async function handleRenameCouple(slug: string) {
+    setManageError('');
+    const nextNames = editingCoupleValue.trim();
+    if (nextNames.length < 1 || nextNames.length > 120) {
+      setManageError('Couple names must be between 1 and 120 characters.');
+      return;
+    }
+    setSavingCouple(true);
+    try {
+      await updateDoc(doc(db, 'weddings', slug), {
+        coupleNames: nextNames,
+        updatedAt: serverTimestamp(),
+      });
+      setEditingCoupleSlug(null);
+      setEditingCoupleValue('');
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Failed to rename couple');
+    } finally {
+      setSavingCouple(false);
     }
   }
 
@@ -606,7 +634,63 @@ export function SuperAdminPage() {
                   return (
                     <tr key={w.slug} className="hover:bg-[#FAF7F2]/60">
                       <td className="py-3 px-4 font-mono text-xs">{w.slug}</td>
-                      <td className="py-3 px-4 font-medium">{w.coupleNames}</td>
+                      <td className="py-3 px-4 font-medium">
+                        {editingCoupleSlug === w.slug ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleRenameCouple(w.slug);
+                            }}
+                            className="flex items-center gap-1.5"
+                          >
+                            <input
+                              type="text"
+                              value={editingCoupleValue}
+                              onChange={(e) => setEditingCoupleValue(e.target.value)}
+                              maxLength={120}
+                              required
+                              autoFocus
+                              aria-label={`Couple names for ${w.slug}`}
+                              className="px-2 py-1 rounded border border-[#1D1915]/20 text-xs sm:text-sm bg-white w-44"
+                            />
+                            <button
+                              type="submit"
+                              disabled={savingCouple}
+                              aria-label="Save couple names"
+                              className="p-1 rounded border border-[#1D1915]/15 hover:bg-[#FAF7F2] disabled:opacity-40 cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCoupleSlug(null);
+                                setEditingCoupleValue('');
+                              }}
+                              aria-label="Cancel rename"
+                              className="p-1 rounded border border-[#1D1915]/15 hover:bg-[#FAF7F2] cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="inline-flex items-center gap-2">
+                            <span>{w.coupleNames}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCoupleSlug(w.slug);
+                                setEditingCoupleValue(w.coupleNames);
+                              }}
+                              aria-label={`Rename ${w.coupleNames}`}
+                              title="Rename couple"
+                              className="p-1 rounded text-[#5E554B] hover:text-[#1D1915] hover:bg-[#FAF7F2] cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 tabular-nums text-xs">{w.weddingDate}</td>
                       <td className="py-3 px-4 tabular-nums text-xs">{expStr}</td>
                       <td className="py-3 px-4 text-xs">
