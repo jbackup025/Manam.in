@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, Check, Copy, ExternalLink, MapPin, Phone } from 'lucide-react';
+import { CalendarPlus, ExternalLink, MapPin, Phone } from 'lucide-react';
 import { HEADING_FONTS } from '../lib/constants';
 import {
   pickBorderColor,
@@ -10,6 +10,7 @@ import {
 import { downloadEventIcs } from '../lib/ics';
 import type { BlessingDoc, PublicProgressDoc, PublicSiteDoc } from '../types/wedding';
 import { AssetImage } from './AssetImage';
+import { CopyLinkButton } from './CopyLinkButton';
 import { PublicFooter } from './PublicFooter';
 import { RsvpFormSection } from './RsvpFormSection';
 import { WishlistModal } from './WishlistModal';
@@ -55,7 +56,6 @@ export function WeddingSiteRenderer({
   const borderColor = pickBorderColor(theme.backgroundColor);
   const primaryBtnText = pickReadableText(theme.primaryColor);
 
-  const [copiedLink, setCopiedLink] = useState(false);
   const [wishlistOpen, setWishlistOpen] = useState(false);
   const [prefilledGuestName, setPrefilledGuestName] = useState('');
   const [countdown, setCountdown] = useState<{
@@ -246,19 +246,13 @@ export function WeddingSiteRenderer({
                     Confirm Attendance
                   </a>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(shareUrl);
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2500);
-                  }}
-                  className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border text-sm font-medium cursor-pointer"
+                <CopyLinkButton
+                  url={shareUrl}
+                  label={site.labels.copyLinkText || 'Copy Link'}
+                  copiedLabel="Copied!"
+                  className="border"
                   style={{ borderColor, backgroundColor: surfaceColor }}
-                >
-                  {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copiedLink ? 'Invitation link copied' : site.labels.copyLinkText || 'Copy invitation link'}
-                </button>
+                />
               </div>
             )}
           </div>

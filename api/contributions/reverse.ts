@@ -15,19 +15,18 @@ const ReverseSchema = z.object({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!enforceSameOriginPost(req, res)) return;
-
-  const caller = await verifyCaller(req, res);
-  if (!caller) return;
-
-  const parsed = ReverseSchema.safeParse(req.body);
-  if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
-    return res.status(400).json({ error: 'Invalid contribution request payload' });
-  }
-
-  const { slug, contributionId } = parsed.data;
-
   try {
+    if (!enforceSameOriginPost(req, res)) return;
+
+    const caller = await verifyCaller(req, res);
+    if (!caller) return;
+
+    const parsed = ReverseSchema.safeParse(req.body);
+    if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
+      return res.status(400).json({ error: 'Invalid contribution request payload' });
+    }
+
+    const { slug, contributionId } = parsed.data;
     const { db } = getAdminServices();
     const hasAccess = await requireWeddingAccess(db, slug, caller);
     if (!hasAccess) {
@@ -104,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ ok: true, alreadyReversed: outcome.kind === 'already_reversed' });
   } catch (err) {
-    console.error('Reverse contribution error');
+    console.error('[api/contributions/reverse] Error:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message === 'SERVICE_ACCOUNT_MISSING' ? 'Server credentials missing' : 'Failed to reverse contribution' });
   }

@@ -103,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       flaggedReadyForErase: flaggedCount,
     });
   } catch (err) {
-    console.error('Daily cron error');
+    console.error('[api/cron/daily] Error:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message === 'SERVICE_ACCOUNT_MISSING' ? 'Server credentials missing' : 'Cron run failed' });
   }

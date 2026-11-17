@@ -43,36 +43,42 @@ function resolveDatabaseId(): string | undefined {
 }
 
 export function getAdminServices(): { app: App; db: Firestore; auth: ReturnType<typeof getAuth> } {
-  if (!cachedApp) {
-    if (getApps().length > 0) {
-      cachedApp = getApps()[0];
-    } else {
-      const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-      if (!rawJson) {
-        throw new Error('SERVICE_ACCOUNT_MISSING');
+  try {
+    if (!cachedApp) {
+      if (getApps().length > 0) {
+        cachedApp = getApps()[0];
+      } else {
+        const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+        if (!rawJson) {
+          throw new Error('SERVICE_ACCOUNT_MISSING');
+        }
+        let serviceAccount: Record<string, unknown>;
+        try {
+          serviceAccount = JSON.parse(rawJson);
+        } catch (parseErr) {
+          console.error('[firebaseAdmin] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', parseErr);
+          throw new Error('SERVICE_ACCOUNT_INVALID');
+        }
+        cachedApp = initializeApp({
+          credential: cert(serviceAccount as Parameters<typeof cert>[0]),
+        });
       }
-      let serviceAccount: Record<string, unknown>;
-      try {
-        serviceAccount = JSON.parse(rawJson);
-      } catch {
-        throw new Error('SERVICE_ACCOUNT_INVALID');
-      }
-      cachedApp = initializeApp({
-        credential: cert(serviceAccount as Parameters<typeof cert>[0]),
-      });
     }
-  }
 
-  if (!cachedDb) {
-    const dbId = resolveDatabaseId();
-    cachedDb = dbId ? getFirestore(cachedApp, dbId) : getFirestore(cachedApp);
-  }
+    if (!cachedDb) {
+      const dbId = resolveDatabaseId();
+      cachedDb = dbId ? getFirestore(cachedApp, dbId) : getFirestore(cachedApp);
+    }
 
-  return {
-    app: cachedApp,
-    db: cachedDb,
-    auth: getAuth(cachedApp),
-  };
+    return {
+      app: cachedApp,
+      db: cachedDb,
+      auth: getAuth(cachedApp),
+    };
+  } catch (err) {
+    console.error('[firebaseAdmin] getAdminServices error:', err);
+    throw err;
+  }
 }
 
 export function enforceSameOriginPost(req: VercelRequest, res: VercelResponse): boolean {
@@ -109,19 +115,19 @@ export async function verifyCaller(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<VerifiedCaller | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing Authorization bearer token' });
-    return null;
-  }
-
-  const idToken = authHeader.slice('Bearer '.length).trim();
-  if (!idToken) {
-    res.status(401).json({ error: 'Empty bearer token' });
-    return null;
-  }
-
   try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing Authorization bearer token' });
+      return null;
+    }
+
+    const idToken = authHeader.slice('Bearer '.length).trim();
+    if (!idToken) {
+      res.status(401).json({ error: 'Empty bearer token' });
+      return null;
+    }
+
     const { auth } = getAdminServices();
     const decoded = await auth.verifyIdToken(idToken, true);
     if (!decoded.email_verified || !decoded.email) {
@@ -135,6 +141,7 @@ export async function verifyCaller(
       isSuperAdmin: email === SUPER_ADMIN_EMAIL,
     };
   } catch (err) {
+    console.error('[auth] verifyCaller failed:', err);
     const msg = err instanceof Error ? err.message : '';
     if (msg === 'SERVICE_ACCOUNT_MISSING' || msg === 'SERVICE_ACCOUNT_INVALID') {
       res.status(503).json({ error: 'Server Firebase Admin credentials are not configured' });
@@ -156,8 +163,13 @@ export async function requireWeddingAccess(
   if (caller.isSuperAdmin) {
     return true;
   }
-  const adminSnap = await db.doc(`weddings/${slug}/admins/${caller.email}`).get();
-  return adminSnap.exists;
+  try {
+    const adminSnap = await db.doc(`weddings/${slug}/admins/${caller.email}`).get();
+    return adminSnap.exists;
+  } catch (err) {
+    console.error('[auth] requireWeddingAccess failed:', err);
+    throw err;
+  }
 }
 
 export function isValidSlugServer(slug: string): boolean {

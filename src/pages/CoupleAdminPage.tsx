@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Check,
-  Copy,
   Download,
   ExternalLink,
   Eye,
   Printer,
   RotateCcw,
-  Share2,
   Trash2,
 } from 'lucide-react';
 import {
@@ -42,8 +39,11 @@ import type {
   RsvpDoc,
   WeddingDoc,
 } from '../types/wedding';
+import { resetPlatformDocumentMeta } from '../lib/seo';
 import { WeddingSiteRenderer } from '../components/WeddingSiteRenderer';
+import { CopyLinkButton } from '../components/CopyLinkButton';
 import { CustomizationEditor } from '../components/admin/CustomizationEditor';
+import { InvitationShareCard } from '../components/admin/InvitationShareCard';
 
 type AdminTab = 'overview' | 'rsvps' | 'accommodation' | 'wishlist' | 'customize';
 
@@ -81,7 +81,17 @@ export function CoupleAdminPage() {
   const [contribRecipientFilter, setContribRecipientFilter] = useState<'all' | 'partner1' | 'partner2'>('all');
   const [busyContribId, setBusyContribId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
-  const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    resetPlatformDocumentMeta(
+      `Manage /${slug} — ${PLATFORM_NAME}`,
+      `Couple administration portal for ${slug} on ${PLATFORM_NAME}.`,
+      'noindex, nofollow'
+    );
+    return () => {
+      resetPlatformDocumentMeta();
+    };
+  }, [slug]);
 
   // Role enforcement on auth change
   useEffect(() => {
@@ -467,7 +477,13 @@ export function CoupleAdminPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <CopyLinkButton
+              url={publicUrl}
+              label="Copy Link"
+              copiedLabel="Copied!"
+              className="!min-h-[38px] !px-3 !py-1.5 !text-xs border border-[#1D1915]/15 bg-white hover:bg-[#FAF7F2]"
+            />
             <a
               href={`/wedding/${slug}`}
               target="_blank"
@@ -539,26 +555,6 @@ export function CoupleAdminPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(publicUrl);
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2500);
-                  }}
-                  className="min-h-[42px] px-4 py-2 rounded-lg border border-[#1D1915]/15 bg-white text-xs sm:text-sm font-medium inline-flex items-center gap-2 cursor-pointer"
-                >
-                  {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copiedLink ? 'Copied link' : 'Copy invitation link'}
-                </button>
-                <a
-                  href={whatsappShareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-h-[42px] px-4 py-2 rounded-lg bg-[#1E4D3B] text-white text-xs sm:text-sm font-medium inline-flex items-center gap-2"
-                >
-                  <Share2 className="w-4 h-4" /> Share on WhatsApp
-                </a>
-                <button
-                  type="button"
-                  onClick={() => {
                     exportRsvpsToCsv(slug, rsvps);
                     exportContributionsToCsv(slug, contributions, p1Name, p2Name);
                     exportAllWeddingJson(slug, { site, rsvps, contributions, blessings });
@@ -569,6 +565,13 @@ export function CoupleAdminPage() {
                 </button>
               </div>
             </div>
+
+            <InvitationShareCard
+              slug={slug}
+              coupleNames={wedding?.coupleNames || slug}
+              publicUrl={publicUrl}
+              whatsappShareUrl={whatsappShareUrl}
+            />
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[

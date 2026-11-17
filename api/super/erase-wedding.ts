@@ -39,25 +39,24 @@ async function deleteCollectionInBatches(db: Firestore, path: string): Promise<n
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!enforceSameOriginPost(req, res)) return;
-
-  const caller = await verifyCaller(req, res);
-  if (!caller) return;
-  if (!caller.isSuperAdmin) {
-    return res.status(403).json({ error: 'Super admin access required' });
-  }
-
-  const parsed = EraseSchema.safeParse(req.body);
-  if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
-    return res.status(400).json({ error: 'Invalid erase request payload' });
-  }
-
-  const { slug, confirmSlug } = parsed.data;
-  if (slug !== confirmSlug) {
-    return res.status(400).json({ error: 'Confirmation slug does not match' });
-  }
-
   try {
+    if (!enforceSameOriginPost(req, res)) return;
+
+    const caller = await verifyCaller(req, res);
+    if (!caller) return;
+    if (!caller.isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const parsed = EraseSchema.safeParse(req.body);
+    if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
+      return res.status(400).json({ error: 'Invalid erase request payload' });
+    }
+
+    const { slug, confirmSlug } = parsed.data;
+    if (slug !== confirmSlug) {
+      return res.status(400).json({ error: 'Confirmation slug does not match' });
+    }
     const { db } = getAdminServices();
     const weddingRef = db.doc(`weddings/${slug}`);
     const weddingSnap = await weddingRef.get();
@@ -129,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       slugReserved: true,
     });
   } catch (err) {
-    console.error('Erase wedding error');
+    console.error('[api/super/erase-wedding] Error:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message === 'SERVICE_ACCOUNT_MISSING' ? 'Server credentials missing' : 'Failed to erase wedding' });
   }

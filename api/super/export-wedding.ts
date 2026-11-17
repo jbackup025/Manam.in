@@ -12,22 +12,21 @@ const ExportSchema = z.object({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!enforceSameOriginPost(req, res)) return;
-
-  const caller = await verifyCaller(req, res);
-  if (!caller) return;
-  if (!caller.isSuperAdmin) {
-    return res.status(403).json({ error: 'Super admin access required' });
-  }
-
-  const parsed = ExportSchema.safeParse(req.body);
-  if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
-    return res.status(400).json({ error: 'Invalid export request payload' });
-  }
-
-  const { slug } = parsed.data;
-
   try {
+    if (!enforceSameOriginPost(req, res)) return;
+
+    const caller = await verifyCaller(req, res);
+    if (!caller) return;
+    if (!caller.isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const parsed = ExportSchema.safeParse(req.body);
+    if (!parsed.success || !isValidSlugServer(parsed.data.slug)) {
+      return res.status(400).json({ error: 'Invalid export request payload' });
+    }
+
+    const { slug } = parsed.data;
     const { db } = getAdminServices();
     const weddingSnap = await db.doc(`weddings/${slug}`).get();
     if (!weddingSnap.exists) {
@@ -57,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json(result);
   } catch (err) {
-    console.error('Export wedding error');
+    console.error('[api/super/export-wedding] Error:', err);
     const message = err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message === 'SERVICE_ACCOUNT_MISSING' ? 'Server credentials missing' : 'Failed to export wedding' });
   }

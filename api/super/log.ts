@@ -19,20 +19,20 @@ const LogSchema = z.object({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!enforceSameOriginPost(req, res)) return;
-
-  const caller = await verifyCaller(req, res);
-  if (!caller) return;
-  if (!caller.isSuperAdmin) {
-    return res.status(403).json({ error: 'Super admin access required' });
-  }
-
-  const parsed = LogSchema.safeParse(req.body);
-  if (!parsed.success || !isValidSlugServer(parsed.data.targetSlug)) {
-    return res.status(400).json({ error: 'Invalid audit log payload' });
-  }
-
   try {
+    if (!enforceSameOriginPost(req, res)) return;
+
+    const caller = await verifyCaller(req, res);
+    if (!caller) return;
+    if (!caller.isSuperAdmin) {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const parsed = LogSchema.safeParse(req.body);
+    if (!parsed.success || !isValidSlugServer(parsed.data.targetSlug)) {
+      return res.status(400).json({ error: 'Invalid audit log payload' });
+    }
+
     const { db } = getAdminServices();
     await db.collection('platformAuditLog').add({
       actorEmail: caller.email,
@@ -41,7 +41,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       timestamp: FieldValue.serverTimestamp(),
     });
     return res.status(200).json({ ok: true });
-  } catch {
-    return res.status(500).json({ error: 'Failed to record platform audit log' });
+  } catch (err) {
+    console.error('[api/super/log] Error:', err);
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    return res.status(500).json({ error: message === 'SERVICE_ACCOUNT_MISSING' ? 'Server credentials missing' : 'Failed to record platform audit log' });
   }
 }

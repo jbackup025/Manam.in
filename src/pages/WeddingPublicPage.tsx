@@ -11,20 +11,10 @@ import {
 } from 'firebase/firestore';
 import { isValidSlug, PLATFORM_NAME } from '../lib/constants';
 import { db } from '../lib/firebase';
+import { resetPlatformDocumentMeta, updateWeddingDocumentMeta } from '../lib/seo';
 import type { BlessingDoc, PublicProgressDoc, PublicSiteDoc } from '../types/wedding';
 import { PublicFooter } from '../components/PublicFooter';
 import { WeddingSiteRenderer } from '../components/WeddingSiteRenderer';
-
-function setMetaTag(name: string, content: string, isProperty = false) {
-  const attr = isProperty ? 'property' : 'name';
-  let el = document.querySelector(`meta[${attr}="${name}"]`);
-  if (!el) {
-    el = document.createElement('meta');
-    el.setAttribute(attr, name);
-    document.head.appendChild(el);
-  }
-  el.setAttribute('content', content);
-}
 
 export function WeddingPublicPage() {
   const { slug = '' } = useParams();
@@ -80,6 +70,15 @@ export function WeddingPublicPage() {
   }, [slug]);
 
   useEffect(() => {
+    if (unavailable && !loading) {
+      resetPlatformDocumentMeta(
+        `Invitation Unavailable — ${PLATFORM_NAME}`,
+        'This wedding invitation is not currently available.',
+        'noindex, nofollow'
+      );
+      return;
+    }
+
     if (!site || unavailable) return;
 
     const coupleNames = `${site.couple.partner1Name} & ${site.couple.partner2Name}`;
@@ -87,15 +86,15 @@ export function WeddingPublicPage() {
     const pageDesc =
       site.seo.customDescription ||
       `Wedding invitation for ${coupleNames} on ${PLATFORM_NAME}.`;
+    const canonicalUrl =
+      typeof window !== 'undefined' ? `${window.location.origin}/wedding/${slug}` : undefined;
 
-    document.title = pageTitle;
-    setMetaTag('description', pageDesc);
-    setMetaTag('og:title', pageTitle, true);
-    setMetaTag('og:description', pageDesc, true);
-    setMetaTag(
-      'robots',
-      site.seo.hideFromSearchEngines ? 'noindex, nofollow' : 'index, follow'
-    );
+    updateWeddingDocumentMeta({
+      title: pageTitle,
+      description: pageDesc,
+      url: canonicalUrl,
+      hideFromSearchEngines: site.seo.hideFromSearchEngines,
+    });
 
     const progressUnsub = onSnapshot(
       doc(db, 'weddings', slug, 'public', 'progress'),
@@ -130,8 +129,9 @@ export function WeddingPublicPage() {
     return () => {
       progressUnsub();
       blessingsUnsub();
+      resetPlatformDocumentMeta();
     };
-  }, [slug, site, unavailable]);
+  }, [slug, site, unavailable, loading]);
 
   if (loading) {
     return (
