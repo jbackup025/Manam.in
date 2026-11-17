@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, ExternalLink, MapPin, Phone } from 'lucide-react';
+import { ExternalLink, MapPin, Phone } from 'lucide-react';
 import { HEADING_FONTS } from '../lib/constants';
 import {
   pickBorderColor,
@@ -7,8 +7,8 @@ import {
   pickReadableText,
   pickSurfaceColor,
 } from '../lib/contrast';
-import { downloadEventIcs } from '../lib/ics';
 import type { BlessingDoc, PublicProgressDoc, PublicSiteDoc } from '../types/wedding';
+import { AddToCalendarButton } from './AddToCalendarButton';
 import { AssetImage } from './AssetImage';
 import { CopyLinkButton } from './CopyLinkButton';
 import { PublicFooter } from './PublicFooter';
@@ -324,11 +324,11 @@ export function WeddingSiteRenderer({
                       {site.events.map((ev) => (
                         <article
                           key={ev.id}
-                          className="rounded-2xl overflow-hidden border flex flex-col"
+                          className="rounded-2xl border flex flex-col"
                           style={{ backgroundColor: surfaceColor, borderColor }}
                         >
                           {(ev.photoAssetId || ev.fallbackUrl) && (
-                            <div className="aspect-[16/10] w-full overflow-hidden border-b" style={{ borderColor }}>
+                            <div className="aspect-[16/10] w-full rounded-t-2xl overflow-hidden border-b" style={{ borderColor }}>
                               <AssetImage
                                 slug={slug}
                                 assetId={ev.photoAssetId}
@@ -362,15 +362,14 @@ export function WeddingSiteRenderer({
                             </div>
 
                             <div className="flex flex-wrap gap-2.5 pt-2">
-                              <button
-                                type="button"
-                                onClick={() => downloadEventIcs(ev, coupleNames)}
-                                className="min-h-[40px] px-3.5 py-2 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
-                                style={{ borderColor }}
-                              >
-                                <CalendarPlus className="w-3.5 h-3.5" aria-hidden="true" />
-                                Add to Calendar
-                              </button>
+                              <AddToCalendarButton
+                                slug={slug}
+                                event={ev}
+                                coupleNames={coupleNames}
+                                borderColor={borderColor}
+                                surfaceColor={surfaceColor}
+                                mutedColor={mutedColor}
+                              />
                               {ev.mapLink && (
                                 <a
                                   href={ev.mapLink}
