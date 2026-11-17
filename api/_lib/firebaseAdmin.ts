@@ -81,25 +81,118 @@ export function getAdminServices(): { app: App; db: Firestore; auth: ReturnType<
   }
 }
 
+const EXPLICIT_ALLOWED_ORIGINS = new Set<string>([
+  'https://manamin.vercel.app',
+  'https://manam.in',
+  'https://www.manam.in',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+]);
+
+function addEnvOrigin(set: Set<string>, raw?: string) {
+  if (!raw) return;
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  try {
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    set.add(new URL(withScheme).origin.toLowerCase());
+  } catch {
+    // Ignore malformed optional env URL
+  }
+}
+
+function getAllowedOrigins(): Set<string> {
+  const allowed = new Set(EXPLICIT_ALLOWED_ORIGINS);
+  addEnvOrigin(allowed, process.env.APP_URL);
+  addEnvOrigin(allowed, process.env.VERCEL_URL);
+  addEnvOrigin(allowed, process.env.VERCEL_BRANCH_URL);
+  addEnvOrigin(allowed, process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  return allowed;
+}
+
+function isAllowedOrigin(originHeader: string, req: VercelRequest): { ok: boolean; reason?: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(originHeader);
+  } catch {
+    return { ok: false, reason: 'Invalid origin URL' };
+  }
+
+  const normalizedOrigin = parsed.origin.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase();
+  const hostHeader = String(req.headers.host || '').trim().toLowerCase();
+  const forwardedHostRaw = req.headers['x-forwarded-host'];
+  const forwardedHost = (Array.isArray(forwardedHostRaw) ? forwardedHostRaw[0] : forwardedHostRaw || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+
+  if (
+    (hostHeader && parsed.host.toLowerCase() === hostHeader) ||
+    (forwardedHost && parsed.host.toLowerCase() === forwardedHost)
+  ) {
+    return { ok: true };
+  }
+
+  if (getAllowedOrigins().has(normalizedOrigin)) {
+    return { ok: true };
+  }
+
+  // Allow AI Studio preview domains (e.g. https://ais-dev-*.run.app, https://ais-pre-*.run.app)
+  if (
+    parsed.protocol === 'https:' &&
+    (/^ais-(dev|pre)-[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/i.test(hostname) ||
+      hostname.endsWith('.aistudio.google.com'))
+  ) {
+    return { ok: true };
+  }
+
+  // Allow local development origins on localhost
+  if (
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    (hostname === 'localhost' || hostname === '127.0.0.1')
+  ) {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    reason: `Origin ${normalizedOrigin} is not in allowed origins (host=${hostHeader || 'none'}, x-forwarded-host=${forwardedHost || 'none'})`,
+  };
+}
+
 export function enforceSameOriginPost(req: VercelRequest, res: VercelResponse): boolean {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
+  const originHeaderRaw = req.headers.origin;
+  const originHeader = Array.isArray(originHeaderRaw) ? originHeaderRaw[0] : originHeaderRaw;
+
+  if (originHeader) {
+    const check = isAllowedOrigin(originHeader, req);
+    if (!check.ok) {
+      console.error('[auth/csrf] Bad origin rejected:', {
+        origin: originHeader,
+        host: req.headers.host,
+        forwardedHost: req.headers['x-forwarded-host'],
+        reason: check.reason,
+      });
+      res.status(403).json({ error: 'Cross-origin request rejected: origin not allowed' });
+      return false;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', originHeader);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).json({ ok: true });
     return false;
   }
 
-  const hostHeader = req.headers.host;
-  const originHeader = req.headers.origin;
-  if (originHeader && hostHeader) {
-    try {
-      const originHost = new URL(originHeader).host;
-      if (originHost !== hostHeader) {
-        res.status(403).json({ error: 'Cross-origin request rejected' });
-        return false;
-      }
-    } catch {
-      res.status(403).json({ error: 'Invalid origin header' });
-      return false;
-    }
+  if (req.method !== 'POST') {
+    console.error('[auth/method] Method not allowed:', req.method);
+    res.status(405).json({ error: 'Method not allowed' });
+    return false;
   }
 
   return true;
@@ -116,21 +209,36 @@ export async function verifyCaller(
   res: VercelResponse
 ): Promise<VerifiedCaller | null> {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Missing Authorization bearer token' });
+    const authHeaderRaw = req.headers.authorization;
+    const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
+    if (!authHeader) {
+      console.error('[auth] Not signed in: missing Authorization header');
+      res.status(401).json({ error: 'Not signed in: missing Authorization bearer token' });
       return null;
     }
 
-    const idToken = authHeader.slice('Bearer '.length).trim();
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+    if (!match) {
+      console.error('[auth] Not signed in: Authorization header is not Bearer format');
+      res.status(401).json({ error: 'Not signed in: invalid Authorization bearer header' });
+      return null;
+    }
+
+    const idToken = match[1].trim();
     if (!idToken) {
-      res.status(401).json({ error: 'Empty bearer token' });
+      console.error('[auth] Not signed in: empty Authorization bearer token');
+      res.status(401).json({ error: 'Not signed in: empty bearer token' });
       return null;
     }
 
     const { auth } = getAdminServices();
     const decoded = await auth.verifyIdToken(idToken, true);
     if (!decoded.email_verified || !decoded.email) {
+      console.error('[auth] Forbidden: signed-in token missing verified Google email', {
+        uid: decoded.uid,
+        hasEmail: Boolean(decoded.email),
+        emailVerified: Boolean(decoded.email_verified),
+      });
       res.status(403).json({ error: 'Verified Google email required' });
       return null;
     }
@@ -141,12 +249,31 @@ export async function verifyCaller(
       isSuperAdmin: email === SUPER_ADMIN_EMAIL,
     };
   } catch (err) {
-    console.error('[auth] verifyCaller failed:', err);
     const msg = err instanceof Error ? err.message : '';
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code || '')
+        : '';
+
     if (msg === 'SERVICE_ACCOUNT_MISSING' || msg === 'SERVICE_ACCOUNT_INVALID') {
+      console.error('[auth] Server Firebase Admin credentials error:', msg);
       res.status(503).json({ error: 'Server Firebase Admin credentials are not configured' });
       return null;
     }
+
+    if (code === 'auth/id-token-expired') {
+      console.error('[auth] Expired Firebase ID token:', code);
+      res.status(401).json({ error: 'Authentication token expired. Please sign in again.' });
+      return null;
+    }
+
+    if (code === 'auth/id-token-revoked') {
+      console.error('[auth] Revoked Firebase ID token:', code);
+      res.status(401).json({ error: 'Authentication session was revoked. Please sign in again.' });
+      return null;
+    }
+
+    console.error('[auth] Token verification failed:', { code, message: msg, err });
     res.status(401).json({ error: 'Invalid or expired authentication token' });
     return null;
   }

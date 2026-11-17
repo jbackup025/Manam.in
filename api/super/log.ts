@@ -25,6 +25,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const caller = await verifyCaller(req, res);
     if (!caller) return;
     if (!caller.isSuperAdmin) {
+      console.error('[api/super/log] Forbidden: caller is not super admin', {
+        uid: caller.uid,
+        callerEmail: caller.email,
+      });
       return res.status(403).json({ error: 'Super admin access required' });
     }
 

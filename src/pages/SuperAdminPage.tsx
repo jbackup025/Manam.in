@@ -95,6 +95,7 @@ export function SuperAdminPage() {
   const [eraseConfirmInput, setEraseConfirmInput] = useState('');
   const [erasing, setErasing] = useState(false);
   const [eraseResult, setEraseResult] = useState<string>('');
+  const [eraseError, setEraseError] = useState<string>('');
   const [seedingDemo, setSeedingDemo] = useState(false);
 
   const isAuthorizedSuper =
@@ -417,21 +418,26 @@ export function SuperAdminPage() {
     if (!eraseTarget) return;
     setErasing(true);
     setEraseResult('');
+    setEraseError('');
     try {
       const res = await callAuthedApi<{
         ok: boolean;
         deletedDocs: number;
         remainingCount: number;
-      }>('/api/super/erase-wedding', {
-        slug: eraseTarget.slug,
-        confirmSlug: eraseConfirmInput.trim().toLowerCase(),
-      });
+      }>(
+        '/api/super/erase-wedding',
+        {
+          slug: eraseTarget.slug,
+          confirmSlug: eraseConfirmInput.trim().toLowerCase(),
+        },
+        { forceRefreshToken: true }
+      );
       setEraseResult(
         `Erased ${res.deletedDocs} documents. Remaining: ${res.remainingCount}. Slug "${eraseTarget.slug}" is now permanently reserved.`
       );
       if (selectedSlug === eraseTarget.slug) setSelectedSlug(null);
     } catch (err) {
-      setEraseResult(err instanceof Error ? err.message : 'Erase failed');
+      setEraseError(err instanceof Error ? err.message : 'Erase failed');
     } finally {
       setErasing(false);
     }
@@ -673,6 +679,7 @@ export function SuperAdminPage() {
                     setEraseTarget(selectedWedding);
                     setEraseConfirmInput('');
                     setEraseResult('');
+                    setEraseError('');
                   }}
                   className="min-h-[38px] px-3.5 rounded-lg bg-[#991B1B] text-white text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
                 >
@@ -998,6 +1005,12 @@ export function SuperAdminPage() {
                 className="w-full min-h-[40px] px-3 rounded-lg border border-[#1D1915]/20 text-sm font-mono"
               />
             </div>
+
+            {eraseError && (
+              <div role="alert" className="p-3 rounded-lg bg-[#FEE2E2] text-xs text-[#991B1B]">
+                {eraseError}
+              </div>
+            )}
 
             {eraseResult && (
               <div className="p-3 rounded-lg bg-[#F2ECE1] text-xs text-[#1D1915]">
