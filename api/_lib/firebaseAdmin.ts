@@ -42,26 +42,100 @@ function resolveDatabaseId(): string | undefined {
   return undefined;
 }
 
+function resolveServiceAccountCredential() {
+  const jsonCandidates: Array<{ name: string; raw: string | undefined }> = [
+    { name: 'FIREBASE_SERVICE_ACCOUNT', raw: process.env.FIREBASE_SERVICE_ACCOUNT },
+    { name: 'FIREBASE_SERVICE_ACCOUNT_JSON', raw: process.env.FIREBASE_SERVICE_ACCOUNT_JSON },
+  ];
+
+  for (const candidate of jsonCandidates) {
+    const trimmed = candidate.raw?.trim();
+    if (!trimmed) continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      console.error(
+        `[firebaseAdmin] Invalid ${candidate.name}: value is not valid JSON.`
+      );
+      throw new Error('SERVICE_ACCOUNT_INVALID');
+    }
+
+    const projectId =
+      typeof parsed.project_id === 'string' ? parsed.project_id.trim() : '';
+    const clientEmail =
+      typeof parsed.client_email === 'string' ? parsed.client_email.trim() : '';
+    const privateKey =
+      typeof parsed.private_key === 'string'
+        ? parsed.private_key.trim().replace(/\\n/g, '\n')
+        : '';
+
+    const missingFields: string[] = [];
+    if (!projectId) missingFields.push('project_id');
+    if (!clientEmail) missingFields.push('client_email');
+    if (!privateKey) missingFields.push('private_key');
+
+    if (missingFields.length > 0) {
+      console.error(
+        `[firebaseAdmin] Invalid ${candidate.name}: missing required JSON field(s): ${missingFields.join(', ')}.`
+      );
+      throw new Error('SERVICE_ACCOUNT_INVALID');
+    }
+
+    return cert({
+      ...parsed,
+      projectId,
+      clientEmail,
+      privateKey,
+    } as Parameters<typeof cert>[0]);
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim() || '';
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim() || '';
+  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY?.trim() || '';
+  const privateKey = privateKeyRaw ? privateKeyRaw.replace(/\\n/g, '\n') : '';
+
+  const missingIndividual: string[] = [];
+  if (!projectId) missingIndividual.push('FIREBASE_PROJECT_ID');
+  if (!clientEmail) missingIndividual.push('FIREBASE_CLIENT_EMAIL');
+  if (!privateKey) missingIndividual.push('FIREBASE_PRIVATE_KEY');
+
+  if (missingIndividual.length === 0) {
+    try {
+      return cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      });
+    } catch {
+      console.error(
+        '[firebaseAdmin] Invalid individual Firebase Admin variables: check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY formatting.'
+      );
+      throw new Error('SERVICE_ACCOUNT_INVALID');
+    }
+  }
+
+  if (missingIndividual.length < 3) {
+    console.error(
+      `[firebaseAdmin] Incomplete Firebase Admin configuration: missing ${missingIndividual.join(', ')}.`
+    );
+  } else {
+    console.error(
+      '[firebaseAdmin] Missing Firebase Admin credentials: set FIREBASE_SERVICE_ACCOUNT (or FIREBASE_SERVICE_ACCOUNT_JSON), or set all three of FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+    );
+  }
+  throw new Error('SERVICE_ACCOUNT_MISSING');
+}
+
 export function getAdminServices(): { app: App; db: Firestore; auth: ReturnType<typeof getAuth> } {
   try {
     if (!cachedApp) {
       if (getApps().length > 0) {
         cachedApp = getApps()[0];
       } else {
-        const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-        if (!rawJson) {
-          throw new Error('SERVICE_ACCOUNT_MISSING');
-        }
-        let serviceAccount: Record<string, unknown>;
-        try {
-          serviceAccount = JSON.parse(rawJson);
-        } catch (parseErr) {
-          console.error('[firebaseAdmin] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', parseErr);
-          throw new Error('SERVICE_ACCOUNT_INVALID');
-        }
-        cachedApp = initializeApp({
-          credential: cert(serviceAccount as Parameters<typeof cert>[0]),
-        });
+        const credential = resolveServiceAccountCredential();
+        cachedApp = initializeApp({ credential });
       }
     }
 
@@ -76,7 +150,10 @@ export function getAdminServices(): { app: App; db: Firestore; auth: ReturnType<
       auth: getAuth(cachedApp),
     };
   } catch (err) {
-    console.error('[firebaseAdmin] getAdminServices error:', err);
+    const msg = err instanceof Error ? err.message : 'UNKNOWN_ERROR';
+    if (msg !== 'SERVICE_ACCOUNT_MISSING' && msg !== 'SERVICE_ACCOUNT_INVALID') {
+      console.error('[firebaseAdmin] getAdminServices initialization error:', msg);
+    }
     throw err;
   }
 }
