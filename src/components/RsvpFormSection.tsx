@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Gift, Pencil } from 'lucide-react';
+import { CalendarPlus, Check, Copy, ExternalLink, Gift, Pencil } from 'lucide-react';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { buildGoogleCalendarUrl } from '../lib/ics';
 import { generateRsvpRef, generateUnguessableId } from '../lib/upi';
 import type { PartyGuest, PublicSiteDoc, RsvpDoc } from '../types/wedding';
 
@@ -453,6 +454,45 @@ export function RsvpFormSection({
               )}
             </div>
           </div>
+
+          {attending === 'yes' && site.events.length > 0 && (
+            <div
+              className="rounded-xl p-4 border mb-6 text-left space-y-2.5"
+              style={{ borderColor }}
+            >
+              <p className="text-xs uppercase tracking-wider" style={{ color: mutedColor }}>
+                Sync to Google Calendar
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {site.events.map((ev) => {
+                  const coupleTitle = [site.couple.partner1Name, site.couple.partner2Name]
+                    .filter(Boolean)
+                    .join(' & ');
+                  const gUrl = buildGoogleCalendarUrl(
+                    ev,
+                    coupleTitle,
+                    typeof window !== 'undefined'
+                      ? `${window.location.origin}/wedding/${slug}`
+                      : undefined
+                  );
+                  return (
+                    <a
+                      key={ev.id}
+                      href={gUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[40px] px-3.5 py-2 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 hover:opacity-85 transition-opacity"
+                      style={{ borderColor }}
+                    >
+                      <CalendarPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>{ev.title}</span>
+                      <ExternalLink className="w-3 h-3 opacity-70" aria-hidden="true" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {site.wishlistConfig.enabled && onVisitWishlist && (
             <button

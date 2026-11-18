@@ -61,8 +61,12 @@ function buildEventLocation(event: EventItem): string {
   return [event.venue, event.address].filter(Boolean).join(', ');
 }
 
-function buildEventDetails(event: EventItem): string {
-  return [event.description, event.mapLink ? `Map: ${event.mapLink}` : '']
+function buildEventDetails(event: EventItem, invitationUrl?: string): string {
+  return [
+    event.description,
+    event.mapLink ? `Map: ${event.mapLink}` : '',
+    invitationUrl ? `Wedding Invitation: ${invitationUrl}` : '',
+  ]
     .filter(Boolean)
     .join('\n\n');
 }
@@ -75,7 +79,11 @@ export function isIosDevice(): boolean {
   return /Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1;
 }
 
-export function buildGoogleCalendarUrl(event: EventItem, coupleNames: string): string {
+export function buildGoogleCalendarUrl(
+  event: EventItem,
+  coupleNames: string,
+  invitationUrl?: string
+): string {
   const { startUtc, endUtc } = parseEventUtcRange(event.date, event.time);
   const params = new URLSearchParams({
     action: 'TEMPLATE',
@@ -83,12 +91,18 @@ export function buildGoogleCalendarUrl(event: EventItem, coupleNames: string): s
     dates: `${startUtc}/${endUtc}`,
     ctz: 'Asia/Kolkata',
     location: buildEventLocation(event),
-    details: buildEventDetails(event),
+    details: buildEventDetails(event, invitationUrl),
+    sf: 'true',
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-export function buildIcsContent(event: EventItem, coupleNames: string, slug = 'wedding'): string {
+export function buildIcsContent(
+  event: EventItem,
+  coupleNames: string,
+  slug = 'wedding',
+  invitationUrl?: string
+): string {
   const { startUtc, endUtc } = parseEventUtcRange(event.date, event.time);
   const safeId = (event.id || event.title || 'event').replace(/[^a-zA-Z0-9_-]/g, '-');
   const safeSlug = (slug || 'wedding').replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -110,8 +124,8 @@ export function buildIcsContent(event: EventItem, coupleNames: string, slug = 'w
     `DTEND:${endUtc}`,
     `SUMMARY:${escapeIcsText(buildEventSummary(event, coupleNames))}`,
     `LOCATION:${escapeIcsText(buildEventLocation(event))}`,
-    `DESCRIPTION:${escapeIcsText(buildEventDetails(event))}`,
-    ...(event.mapLink ? [`URL:${event.mapLink}`] : []),
+    `DESCRIPTION:${escapeIcsText(buildEventDetails(event, invitationUrl))}`,
+    ...(event.mapLink ? [`URL:${event.mapLink}`] : invitationUrl ? [`URL:${invitationUrl}`] : []),
     'STATUS:CONFIRMED',
     'TRANSP:OPAQUE',
     'END:VEVENT',
@@ -121,16 +135,26 @@ export function buildIcsContent(event: EventItem, coupleNames: string, slug = 'w
   return lines.join('\r\n');
 }
 
-export function buildIcsDataUri(event: EventItem, coupleNames: string, slug = 'wedding'): string {
-  const content = buildIcsContent(event, coupleNames, slug);
+export function buildIcsDataUri(
+  event: EventItem,
+  coupleNames: string,
+  slug = 'wedding',
+  invitationUrl?: string
+): string {
+  const content = buildIcsContent(event, coupleNames, slug, invitationUrl);
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(content)}`;
 }
 
-export function downloadEventIcs(event: EventItem, coupleNames: string, slug = 'wedding'): void {
-  const content = buildIcsContent(event, coupleNames, slug);
+export function downloadEventIcs(
+  event: EventItem,
+  coupleNames: string,
+  slug = 'wedding',
+  invitationUrl?: string
+): void {
+  const content = buildIcsContent(event, coupleNames, slug, invitationUrl);
 
   if (isIosDevice()) {
-    window.location.assign(buildIcsDataUri(event, coupleNames, slug));
+    window.location.assign(buildIcsDataUri(event, coupleNames, slug, invitationUrl));
     return;
   }
 

@@ -28,7 +28,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { callAuthedApi } from '../lib/apiClient';
-import { useAuth } from '../lib/authContext';
+import { formatFriendlyAuthError, useAuth } from '../lib/authContext';
 import {
   isValidSlug,
   MAX_ADMINS_PER_WEDDING,
@@ -62,7 +62,7 @@ function isGracePassed(w: WeddingDoc): boolean {
 }
 
 export function SuperAdminPage() {
-  const { user, authReady, signInWithGoogle, signOutNow } = useAuth();
+  const { user, authReady, redirectError, clearAuthError, signInWithGoogle, signOutNow } = useAuth();
   const [accessDenied, setAccessDenied] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -497,21 +497,20 @@ export function SuperAdminPage() {
               Access denied.
             </div>
           )}
-          {authError && (
+          {(authError || redirectError) && (
             <div role="alert" className="p-3 rounded-lg bg-[#FEE2E2] text-[#991B1B] text-xs">
-              {authError}
+              {authError || redirectError}
             </div>
           )}
           <button
             type="button"
-            onClick={async () => {
+            onClick={() => {
               setAuthError('');
               setAccessDenied(false);
-              try {
-                await signInWithGoogle();
-              } catch (err) {
-                setAuthError(err instanceof Error ? err.message : 'Sign-in failed');
-              }
+              clearAuthError();
+              signInWithGoogle().catch((err) => {
+                setAuthError(formatFriendlyAuthError(err));
+              });
             }}
             className="w-full min-h-[44px] px-5 py-2.5 rounded-lg bg-[#7C5821] text-[#FAF7F2] text-sm font-medium hover:bg-[#66471A] cursor-pointer"
           >

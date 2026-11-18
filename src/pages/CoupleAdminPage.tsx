@@ -22,7 +22,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { callAuthedApi } from '../lib/apiClient';
-import { useAuth } from '../lib/authContext';
+import { formatFriendlyAuthError, useAuth } from '../lib/authContext';
 import { formatINR, isValidSlug, PLATFORM_NAME, SUPER_ADMIN_EMAIL } from '../lib/constants';
 import {
   exportAllWeddingJson,
@@ -59,7 +59,7 @@ type AdminTab = 'overview' | 'rsvps' | 'accommodation' | 'wishlist' | 'customize
 
 export function CoupleAdminPage() {
   const { slug = '' } = useParams();
-  const { user, authReady, signInWithGoogle, signOutNow } = useAuth();
+  const { user, authReady, redirectError, clearAuthError, signInWithGoogle, signOutNow } = useAuth();
 
   const [checkingRole, setCheckingRole] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -256,14 +256,13 @@ export function CoupleAdminPage() {
     }, 1200);
   }
 
-  async function handleGoogleSignIn() {
+  function handleGoogleSignIn() {
     setAuthError('');
     setAccessDenied(false);
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Sign-in failed');
-    }
+    clearAuthError();
+    signInWithGoogle().catch((err) => {
+      setAuthError(formatFriendlyAuthError(err));
+    });
   }
 
   // Computed metrics
@@ -454,9 +453,9 @@ export function CoupleAdminPage() {
               Access denied.
             </div>
           )}
-          {authError && (
+          {(authError || redirectError) && (
             <div role="alert" className="p-3 rounded-lg bg-[#FEE2E2] text-[#991B1B] text-xs">
-              {authError}
+              {authError || redirectError}
             </div>
           )}
           <p className="text-sm text-[#5E554B]">
